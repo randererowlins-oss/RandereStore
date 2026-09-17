@@ -1,0 +1,358 @@
+// Prisma Schema for RANDERE Circular Fashion & Creative Studio
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  STYLIST
+  CREATOR
+}
+
+enum ProductType {
+  CURATED
+  REMADE
+  ARTED
+  ACCESSORY
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  SOLD
+  ARCHIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  PROCESSING
+  READY
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum CustomRequestStatus {
+  SUBMITTED
+  REVIEWING
+  QUOTED
+  APPROVED
+  IN_PROGRESS
+  READY
+  COMPLETED
+  DECLINED
+}
+
+enum StylingRequestStatus {
+  SUBMITTED
+  REVIEWING
+  CURATED
+  COMPLETED
+  DECLINED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role      @default(CUSTOMER)
+  avatarUrl    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  addresses       Address[]
+  orders          Order[]
+  customRequests  CustomRequest[]
+  stylingRequests StylingRequest[]
+  savedItems      SavedItem[]
+  carts           Cart[]
+
+  @@map("users")
+}
+
+model Address {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName      String
+  phone         String
+  streetAddress String
+  estate        String?
+  city          String
+  postalCode    String?
+  country       String   @default("Kenya")
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("addresses")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id                         String        @id @default(uuid())
+  name                       String
+  slug                       String        @unique
+  description                String
+  categoryId                 String
+  category                   Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  productType                ProductType   @default(CURATED)
+  price                      Decimal       @db.Decimal(10, 2)
+  currency                   String        @default("KES")
+  size                       String
+  measurements               Json?
+  condition                  String
+  status                     ProductStatus @default(PUBLISHED)
+  stockQuantity              Int           @default(1)
+  oneOfOne                   Boolean       @default(true)
+  materials                  String?
+  careInstructions           String?
+  transformationDescription String?
+  originalGarmentDescription String?
+  featured                   Boolean       @default(false)
+  viewCount                  Int           @default(0)
+  publishedAt                DateTime?     @default(now())
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+
+  images          ProductImage[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  savedItems      SavedItem[]
+  transformations Transformation[]
+
+  @@index([slug])
+  @@index([categorySlug])
+  @@index([status])
+  @@index([productType])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId String?    @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id                String            @id @default(uuid())
+  orderNumber       String            @unique
+  userId            String?
+  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName      String
+  customerEmail     String
+  customerPhone     String
+  shippingAddress   Json
+  subtotal          Decimal           @db.Decimal(10, 2)
+  shippingFee       Decimal           @db.Decimal(10, 2)
+  total             Decimal           @db.Decimal(10, 2)
+  currency          String            @default("KES")
+  paymentStatus     PaymentStatus     @default(PENDING)
+  paymentMethod     String            @default("MPESA")
+  paymentReference  String?
+  fulfillmentStatus FulfillmentStatus @default(PROCESSING)
+  deliveryNotes     String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  items OrderItem[]
+
+  @@index([orderNumber])
+  @@index([customerEmail])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName String
+  productType ProductType
+  price       Decimal     @db.Decimal(10, 2)
+  quantity    Int         @default(1)
+  size        String
+  imageUrl    String?
+  createdAt   DateTime    @default(now())
+
+  @@map("order_items")
+}
+
+model CustomRequest {
+  id                String              @id @default(uuid())
+  userId            String?
+  user              User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName      String
+  customerEmail     String
+  customerPhone     String
+  garmentType       String
+  serviceTypes      Json
+  budget            Decimal?            @db.Decimal(10, 2)
+  deadline          DateTime?
+  description       String
+  garmentPhotos     Json?
+  inspirationPhotos Json?
+  status            CustomRequestStatus @default(SUBMITTED)
+  quoteAmount       Decimal?            @db.Decimal(10, 2)
+  adminNotes        String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@map("custom_requests")
+}
+
+model StylingRequest {
+  id                     String               @id @default(uuid())
+  userId                 String?
+  user                   User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName           String
+  customerEmail          String
+  customerPhone          String
+  occasion               String
+  eventDate              DateTime?
+  budget                 Decimal?             @db.Decimal(10, 2)
+  preferredAesthetic     String
+  size                   String
+  presentationPreference String
+  colorPreferences       String?
+  referencePhotos        Json?
+  additionalNotes        String?
+  status                 StylingRequestStatus @default(SUBMITTED)
+  stylistNotes           String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@map("styling_requests")
+}
+
+model Story {
+  id              String    @id @default(uuid())
+  title           String
+  slug            String    @unique
+  excerpt         String
+  body            String
+  coverImage      String
+  author          String    @default("RANDERE Studio")
+  tags            Json
+  contentType     String    @default("story")
+  published       Boolean   @default(true)
+  publishedAt     DateTime? @default(now())
+  readTimeMinutes Int       @default(3)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+  @@map("stories")
+}
+
+model Transformation {
+  id                         String    @id @default(uuid())
+  title                      String
+  slug                       String    @unique
+  garmentType                String
+  originalGarmentDescription String
+  originalGarmentImageUrl    String
+  processDescription         String
+  processImageUrls           Json
+  finalGarmentDescription    String
+  finalGarmentImageUrl       String
+  techniques                 Json
+  artistAttribution          String?
+  tailorAttribution          String?
+  relatedProductId           String?
+  relatedProduct             Product?  @relation(fields: [relatedProductId], references: [id], onDelete: SetNull)
+  published                  Boolean   @default(true)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  @@index([slug])
+  @@map("transformations")
+}
+
+model SavedItem {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("saved_items")
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  eventType String
+  payload   Json?
+  sessionId String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@map("analytics_events")
+}
